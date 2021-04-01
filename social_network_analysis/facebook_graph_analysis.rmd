@@ -1,0 +1,764 @@
+---
+title: "Progetto WOSN"
+output: html_document
+---
+## Part 1. creating and manipulating graphs
+### 1.1. Reading graphs from files & data frames / Writing graphs to files & data frames
+```{r}
+knitr::opts_chunk$set(echo = TRUE)
+library(igraph)
+getwd()
+setwd("C:/Users/zilvi/Documents/wosn")
+g <- read.graph("./wosn/socfb-wosn-friends.edges_mod", format= 'ncol', directed= FALSE)
+gr_f<- read.graph("./wosn/socfb-wosn-friends.cut.sb.43K.edges", format= 'ncol', directed= FALSE)
+gr_s<- read.graph("./wosn/socfb-wosn-friends.cut.sb.10K.edges", format= 'ncol', directed= FALSE)
+```
+
+
+```{r}
+
+# Modifico il file originale per prendere solo le prime due colonne
+filename= "./wosn/socfb-wosn-friends.edges"
+filename_to_write <- './wosn/socfb-wosn-friends.edges_mod'
+df <- read.table(filename, colClasses=c(NA, NA, "NULL", "NULL"))
+write.table(df, filename_to_write, sep = " ", dec = ".", row.names = FALSE, col.names = FALSE)
+
+
+
+
+```
+```{r}
+
+```
+
+```{r}
+gr_f
+```
+
+
+
+
+```{r}
+V(gr_f)
+E(gr_f)
+```
+```{r}
+head(E(g)$weight, n = 20)
+```
+```{r}
+is.connected(g, mode="weak")
+is.connected(gr_f, mode="weak")
+```
+
+Il nostro grafo da 43 k è fortemente connesso, non è necessario trovargli il giant compenent
+
+```{r}
+components(g)
+```
+```{r}
+extract_component = function(g, index = -1) {
+    comp = components(g)
+    if (index == -1) {
+        index = which.max(comp$csize)
+    }
+    ret = induced.subgraph(g, V(g)[which(comp$membership == index)])
+    return (ret)
+}
+
+#extract_component(g)
+vcount(extract_component(gr_f))
+ecount(extract_component(gr_f))
+
+gc= extract_component(g)
+```
+
+
+```{r}
+#grafo generato dal nostro con distribuzione erdosh Renyi 
+
+r.g <- sample_gnm(vcount(gr_f), ecount(gr_f))
+
+
+
+
+```
+
+
+
+`
+```{r}
+# The values of degree of all nodes in the Giant Component
+#deg= degree(gc)
+degg= degree(gr_f)
+deg_ER= degree(r.g)
+# The maximum degree of the graph
+#max(degree(gc))
+# The maximum degree of the  graph with 48
+max(degree(gr_f))
+mean(degree(gr_f))
+
+
+```
+Degree CCDF
+
+```{r}
+# use ecdf function to generate a function F, which interpolates the values of the EMPIRICAL ccdf obtained from the parameter deg
+F <- ecdf(degg)
+# generate a sequence of values on which F will be computed to plot the CCDF
+x <- seq(min(degg), max(degg), 1)
+# plot the CCDF on the three different scales (loglog, linlog, linlin)
+plot(x, 1 - F(x), log="xy", main="Degree CCDF - loglog", ylab="P(X>d)", 
+     xlab="Degree (d)", xlim=c(1,1000), col="red")
+```
+
+La distrubuzione dei gradi dei nodi sembra scendere molto lentamente. La coda non è propriamente pensante però nella parte finale si può approssimare ad una power law. 
+
+```{r}
+plot(x, 1 - F(x), log="y", main="Degree CCDF - linlog", ylab="P(X>d)", 
+     xlab="Degree (d)", xlim=c(1,1000), col="red")
+```
+
+
+### 3.3. Clustering of our graph
+
+```{r}
+
+
+##$\tt{transitivity(fb\_gc)}$ is the "global" transitivity, i.e., the overall ratio between triangles and triplets in the entire graph
+
+
+transitivity(gr_f, type = "global")
+```
+
+##$\tt{transitivity(fb\_gc, "local")}$ is the "local" transitivity, i.e., the average of the clustering computed on each and every vertex of $\tt{fb\_gc}$. When computing local transitivity, $\tt{NaN}$s are produced in case no triplets are centered on a node. $\tt{Zeros}$ are produced in case no closed triangles exists, but there is at least one triplet. Therefore, we need to remove $\tt{NaN}$s from the average ($\tt{na.rm = TRUE}$).
+
+```{r}
+mean(transitivity(gr_f, type = "local"), na.rm = TRUE)
+```
+### Clustering ER
+
+```{r}
+
+
+er_cc = mean(deg_ER)/vcount(r.g)
+cat("Expected clustering of the ER equivalent graph: ", er_cc, "\n")
+
+
+
+
+```
+# Confrontando la nostra rete con la ER possiamo dire che la rete è mediamente clusterizzata in quanto 0.1477206 >> 0.0007999189 
+
+
+
+
+### 3.2. Assortativity(Usiamo il grafo a meno nodi)
+
+```{r} 
+
+a.nn.deg <- graph.knn(gr_f,V(gr_f))$knn
+plot(degg, a.nn.deg, log="xy",
+  col="goldenrod", xlab=c("Log Vertex Degree"),
+  ylab=c("Log Average Neighbor Degree"))
+
+a.nn.avg.deg = graph.knn(gr_f,V(gr_f))$knnk
+plot(1:max(degree(gr_f)), a.nn.avg.deg, log="xy",
+  col="goldenrod", xlab=c("Log Vertex Degree"),
+  ylab=c("knnk index"))
+
+assortativity.degree(gr_f)
+```
+Grafico knnK ci dice che i nodi a grado alto sono legati a nodi di grado alto. 
+Assortativity== pearson corr coeff. Debole assortatività  positiva della rete. Andamento crescente, ma nella parte finale osserviamo che ci sono nodi a grado alto che sono collegati a nodi a grado basso. Il grafo del knnk ha un andamento fortemente crescente per nodi che hanno grado fino a 100 e poi questo andamento sembra decrescere. Nel knn grafico sporco a destra perché ho più nodi a grado basso che nodi a grado alto. 
+# random network (ER), close to zero
+assortativity_degree(sample_gnp(10000, 3/10000))
+
+# BA model(scale-free), tends to be dissortative
+assortativity_degree(sample_pa(10000, m=4))
+
+
+
+#Assortativity ER
+```{r}
+a.nn.deg <- graph.knn(r.g,V(r.g))$knn
+plot(deg_ER, a.nn.deg, log="xy",
+  col="goldenrod", xlab=c("Log Vertex Degree"),
+  ylab=c("Log Average Neighbor Degree"))
+
+a.nn.avg.deg = graph.knn(r.g,V(r.g))$knnk
+plot(1:max(degree(r.g)), a.nn.avg.deg, log="xy",
+  col="goldenrod", xlab=c("Log Vertex Degree"),
+  ylab=c("knnk index"))
+
+assortativity.degree(r.g)
+```
+### il nostro grafo è decisamente più assortativo di quello di ER e di quella power law
+
+##Assortativity Power law (dal grafo più piccolo)
+```{r}
+
+
+fit_pl_auto = fit_power_law(degg, implementation="plfit")
+# generate an equivalent graph with the obtained power law parameters
+st_pl_auto = static.power.law.game(vcount(gr_f), ecount(gr_f), fit_pl_auto$alpha)
+deg_pl= degree(st_pl_auto)
+
+```
+```{r}
+a.nn.deg <- graph.knn(st_pl_auto,V(st_pl_auto))$knn
+plot(deg_pl, a.nn.deg, log="xy",
+  col="goldenrod", xlab=c("Log Vertex Degree"),
+  ylab=c("Log Average Neighbor Degree"))
+
+a.nn.avg.deg = graph.knn(st_pl_auto,V(st_pl_auto))$knnk
+plot(1:max(degree(st_pl_auto)), a.nn.avg.deg, log="xy",
+  col="goldenrod", xlab=c("Log Vertex Degree"),
+  ylab=c("knnk index"))
+
+assortativity.degree(st_pl_auto)
+```
+
+
+
+### 3.5. Community detection
+
+```{r}
+#GC_simple= simplify()
+```
+
+
+- **NOTE: communities are extracted from a subgraph for computational reasons only**
+```{r}
+
+fg.comm <- fastgreedy.community(gr_f)
+
+
+
+#Properties:
+
+cat("Number of communities\n")
+length(fg.comm)
+cat("\nSizes of communities\n")
+sizes(fg.comm)
+cat("\nMembership of nodes in the communities\n")
+fg.comm$membership
+cat("\nVertices which belong to community #1\n")
+V(gr_f)[which(fg.comm$membership == 1)]
+cat("\nVertices which do not belong to community #1\n")
+V(gr_f)[which(fg.comm$membership != 1)]
+cat("\nEdges which belong to community #1\n")
+E(gr_f)[which(fg.comm$membership == 1)]
+
+
+g.sub1 <- induced.subgraph(GC_simple, V(GC_simple)[which(deg > 200)])
+cat("\nCommunity connections\n")
+crossing(fg.comm, g.sub1)
+
+
+```
+
+Trovate 104 comunità nel grafo che è anche un gc. La più grande ha 15955 nodi, cioè circa 1/3 dei nodi totali.
+
+Extracting sub-graphs from community components
+```{r}
+cat("Subgraph of the community #1: vertices\n")
+vert_first = V(gr_f)[which(fg.comm$membership == 1)]
+vert_first
+cat("\nSubgraph of the community #1: subgraph\n")
+first_com = induced.subgraph(gr_f, vert_first)
+cat("Number of communities\n")
+length(first_com)
+#print_all(first_com)
+
+cat("\nEdge density of the community #1\n")
+cat("Density being the fraction of existing edges in a given graph with respect to the total number of possible edges (N*(N-1)/2)\n")
+edge_density(first_com)
+
+
+
+
+```
+l'edge density della prima comunity più grande non sembra essere molto elavata, Forse perché gli edge che non appartengono a questa comunità sono comuneue tanti
+
+
+###`Shortest Path
+
+```{r}
+from_sample = sample(V(gr_f), 500)
+to_sample = sample(V(gr_f), 500)
+
+
+sp.g.u = distances(gr_f,v=from_sample, to = to_sample, weights = NA, mode = "all")
+
+# max number of hops
+max_dist = max(sp.g.u)
+
+
+# compute and plot the histogram
+h = hist(sp.g.u, breaks = 0:max_dist, right = FALSE, plot = FALSE)
+
+plot(h, freq = FALSE, main="Estimated avg sp length for Friends social graph", xlab="sp length", col="red", xlim = c(0,max_dist+5))
+
+# compute and plot the avg path length
+avg_pl = mean(sp.g.u)
+abline(v = avg_pl, col = "yellow", lw=3)
+label = paste("avg_pl=", avg_pl, sep="")
+text(0.9*max_dist, 0.9*max(h$density), labels = label)
+```
+
+
+#Weighted shortest path 
+```{r}
+# Sample reduction due to complexity of shortest_paths()
+from_sample = sample(V(g), 10)
+to_sample = sample(V(g), 10)
+
+num_path=1
+shortest_path_lengths = NULL
+
+# "cat" only for monitoring the status of execution
+cat("Done: ")
+for(i in 1:length(from_sample)) {
+    # compute the shortest path between a vertex in
+    # "from_sample" and all vertices in "to_sample"
+    sp.g = shortest_paths(g, from_sample[i], to = to_sample, weights = 1/length(E(g)), mode = "all", output = "epath")
+    
+    # for all shortest paths, compute the length
+    for(j in 1:length(sp.g$epath)) {
+        shortest_path_lengths[num_path] = length(sp.g$epath[[j]])
+        num_path = num_path+1
+    }
+    
+    cat(num_path-1, "")
+}
+cat("\n")
+
+# find only non infinite path lengths (just in case there are)
+ind = which(!is.infinite(shortest_path_lengths))
+
+# max number of hops
+max_dist = max(shortest_path_lengths)
+
+# average shortest path
+avg_pl = mean(shortest_path_lengths)
+
+# compute and plot the histogram
+h = hist(shortest_path_lengths, breaks = 0:max_dist, right = FALSE, plot = FALSE)
+plot(h, freq = FALSE, main="Estimated avg sp length for FB social graph", xlab="sp length", col="red", xlim = c(0,max_dist+5))
+
+# draw the line of the average and its label
+abline(v = avg_pl, col = "yellow", lw=3)
+label = paste("avg_pl=", avg_pl, sep="")
+text(0.9*max_dist, 0.9*max(h$density), labels = label)
+```
+
+
+#Comparison for CCDF equivalent Erdos-Renyi graph
+```{r}
+
+
+d.g = degree(r.g)
+F = ecdf(d.g)
+x <- seq(min(d.g), max(d.g)-1, 1)
+plot(x, 1 - F(x), log="xy", main="Degree CCDF comparison", ylab="P(X>x)", 
+     xlab="Degree", xlim=c(1,1000), col="red")
+
+# now plot (again) the CCDF of the original graph
+F = ecdf(degg)
+x <- seq(min(degg), max(degg)-1, 1)
+points(x, 1 - F(x), col="blue")
+
+legend(1, 0.01, legend=c("ER", "Friends"),
+       col=c("red", "blue"), pch = 1)
+
+```
+
+
+
+
+
+
+```{r}
+
+
+fit_pl_auto = fit_power_law(degg, implementation="plfit")
+# fit_power_law parameters:
+# - the set of data to fit (degree of the graph)
+# - the implementation of the fitting algorithm (plfit)
+# 
+# returns a list, where
+# - alpha is the the fitted exponent
+# - xmin is the cutoff value of the power law (minimum value beyond which
+#   the fitting holds)
+cat("alpha=", fit_pl_auto$alpha, ", xmin=", fit_pl_auto$xmin, "\n", sep="")
+
+# generate an equivalent graph with the obtained power law parameters
+st_pl_auto = static.power.law.game(vcount(gr_f), ecount(gr_f), fit_pl_auto$alpha)
+
+# plot the CCDF of the degree for the power law graph with automatic parameters
+tmp_deg <- degree(st_pl_auto)
+F <- ecdf(tmp_deg)
+x <- seq(min(tmp_deg), max(tmp_deg)-1, 1)
+plot(x, 1 - F(x), log="xy", main="Degree CCDF comparison", ylab="P(X>x)", xlab="Degree", xlim=c(1,1000), col="green")
+
+# plot the CCDF of the degree of the original graph
+F <- ecdf(degg)
+x <- seq(min(degg), max(degg), 1)
+points(x, 1 - F(x), col="blue")
+
+# plot the line corresponding to the obtained fit
+fit_x = seq(fit_pl_auto$xmin, max(tmp_deg)-1, 1)
+fit_y = 10000000*fit_x^(-fit_pl_auto$alpha)
+lines(fit_x, fit_y, col="green", lwd=4)
+
+
+legend(1, 0.01, legend=c("St PL (auto)", "Friends"),
+       col=c("green", "blue"), pch = 1)
+```
+
+#alpha è più grande di 3 quindi non è proprio una powerlaw perfetta, perché altrimenti dovrebbe essere compresa tra 2 e 3. Inoltre, per le power law il fitting viene solo nella parte semi finale della coda, per valori con grado superiore a  162. 
+
+
+```{r, warning=FALSE, fig.show='hold'}
+
+# sometimes it is useful to provide explicitly an xmin, after visual analysis
+# of the distribution to fit
+# - in this case, 50 is a reasonable value
+fit_pl = fit_power_law(degg, xmin = 50, implementation="plfit")
+cat("Pre-set xmin: alpha=", fit_pl$alpha, ", xmin=", fit_pl$xmin, "\n", sep="")
+
+# generate the equivalent graph with the obtained power law parameters
+st_pl = static.power.law.game(vcount(gr_f), ecount(gr_f), fit_pl$alpha)
+
+# plot the CCDF of the degree for the power law graph with forced xmin parameter
+tmp_deg <- degree(st_pl)
+F <- ecdf(tmp_deg)
+x <- seq(min(tmp_deg), max(tmp_deg)-1, 1)
+plot(x, 1 - F(x), log="xy", main="Degree CCDF comparison", ylab="P(X>x)", xlab="Degree", xlim=c(1,1000), col="red")
+
+# plot the line corresponding to the obtained fit
+fit_x = seq(fit_pl$xmin, max(tmp_deg)-1, 1)
+fit_y = 5000*fit_x^(-fit_pl$alpha)
+lines(fit_x, fit_y, col="red", lwd=4)
+
+# plot the CCDF of the degree for the power law graph with automatic parameters
+tmp_deg <- degree(st_pl_auto)
+F <- ecdf(tmp_deg)
+x <- seq(min(tmp_deg), max(tmp_deg)-1, 1)
+points(x, 1 - F(x), col="green")
+
+# plot the line corresponding to the obtained fit
+fit_x = seq(fit_pl_auto$xmin, max(tmp_deg)-1, 1)
+fit_y = 10000000*fit_x^(-fit_pl_auto$alpha)
+lines(fit_x, fit_y, col="green", lwd=4)
+
+# plot the CCDF of the degree of the original graph
+F <- ecdf(degg)
+x <- seq(min(degg), max(degg), 1)
+points(x, 1 - F(x), col="blue")
+
+legend(1, 0.01, legend=c("St PL (auto)", "St PL", "Friends"),
+       col=c("green", "red", "blue"), pch = 1)
+```
+
+##Attacco sui nodi basato sul grado
+```{r}
+
+g.sub = induced_subgraph(gr_f, V(gr_f)[which(degree(gr_f) > 300)])
+
+#calcolo il GC del mio subgraph
+is.connected(g.sub)
+toy_components = components(g.sub)
+gc_index = which.max(toy_components$csize) # index of the GC in the csize vector
+# indices of vertices that are member of the GC
+toy_gc_indices = which(toy_components$membership == gc_index) 
+toy_gc_indices
+ord = sort(toy_gc_indices, decreasing = TRUE)
+toy_gc_vertices = V(g.sub)[toy_gc_indices]
+ord_v = sort(toy_gc_vertices, decreasing = TRUE)
+ord_v[1]
+
+#calcolo il grado dei nodi e li ordino
+DEGR <- degree(g.sub)
+DEGR[1]
+ord_degree = sort(DEGR, decreasing = TRUE)
+o<- which.max(ord_degree)
+o[1]
+V(g.sub)[which(DEGR == ord_degree[1])]
+max(degree(g.sub))
+
+# The corresponding node (assuming there is only one with that degree)
+V(g.sub)[which.max(DEGR)]
+which.max(ord_degree)
+which.max(V(g.sub)$name == ord_degree[1])
+v
+h = hist(ord_degree, right=FALSE, plot=FALSE)
+plot(h)
+DEG <- degree(attack_my_g)
+ord_degrees <- sort(DEG, decreasing = TRUE)
+
+#cancello il nodo a grado massimo
+g.sub1 = g.sub - v
+
+########
+attack_my_g <- gr_f
+tot_v <- vcount(attack_my_g )
+size_GC <- c()
+perc<- c()
+for (i in 1:tot_v) {
+  deg = degree(attack_my_g)
+  ord_degrees = sort(deg, decreasing = TRUE)
+  #cat('deg ', ord_degrees, '\n')
+  idx <- V(attack_my_g)[which(deg == ord_degrees[1])]
+  #cat('idx ',  idx, idx, 'Perc nodi ', i/tot_v, '\n')
+  attack_my_g <- delete_vertices(attack_my_g, idx)
+  GC <- extract_component(attack_my_g)
+  GCv<- vcount(GC)
+  size_GC[i] <- (GCv/tot_v)*100
+  perc[i]<- (i/tot_v)*100
+}
+
+a = c(10, 5, 6, 8, 1, 4)
+which.max(a)
+# example: vertex with the maximum degree
+V(fb_gc)[which(deg == ord_degrees[1])]
+
+max(perc)
+
+plot(perc, size_GC,
+     xlab = "% verteces removed",
+     ylab = "% of the GC remained",
+     main = "Sequential Attack")
+lines(perc, size_GC, col = "red")
+
+
+ord_d = sort(deg, decreasing = TRUE)
+hist( ord_d )
+
+```
+```{r}
+g.sub = induced_subgraph(gr_f, V(gr_f)[which(degree(gr_f) > 300)])
+
+
+attack_my_g <- g.sub
+tot_v <- vcount(attack_my_g )
+size_GC <- c()
+perc<- c()
+for (i in 1:tot_v) {
+  deg = degree(attack_my_g)
+  ord_degrees = sort(deg, decreasing = TRUE)
+  #cat('deg ', ord_degrees, '\n')
+  idx <- V(attack_my_g)[which(deg == ord_degrees[1])]
+  #idx <- V(attack_my_g)[which.max(deg == ord_degrees[1])]
+  #cat('idx ',  idx, idx, 'Perc nodi ', i/tot_v, '\n')
+  attack_my_g <- delete_vertices(attack_my_g, idx)
+  attack_my_g <- extract_component(attack_my_g)
+  size_GC[i] <- (vcount(attack_my_g)/tot_v)*100
+  perc[i]<- (i/tot_v)*100
+}
+
+
+plot(perc, size_GC,
+     xlab = "% verteces removed",
+     ylab = "% of the GC remained",
+     main = "Sequential Attack")
+lines(perc, size_GC, col = "red")
+```
+```{r}
+## Modularity Based attack - Con V
+
+t1 <- Sys.time()
+attack_g <- induced.subgraph(gr_f, V(gr_f)[which(degg >= 100)])
+#my_g_GC_simple <- simplify(attack_g)
+my_g_comm <- fastgreedy.community(attack_g)
+
+ 
+
+cros_map <- crossing(my_g_comm, attack_g)
+crossing_edges <- E(attack_g, directed = FALSE)[which(cros_map==TRUE)]
+cat('The number of inter-community edges is: ', length(crossing_edges), '\n')
+cat('The total number of edges is: ', length(E(attack_g)), '\n')
+
+ 
+
+v_list <- unique(c(unique(tail_of(attack_g, crossing_edges))))
+
+ 
+
+tot_v <- vcount(attack_g)
+size_GC <- c()
+v_removed <- c()
+vcnt <- 0
+
+ 
+
+node_bet <- betweenness(attack_g, v=v_list)
+for (i in 1:length(node_bet)) {
+  index_max <- which.max(node_bet)
+  node_max <- node_bet[index_max]
+  max_bet <- node_bet[index_max]
+  vname <- names(node_max)
+  
+  node_bet[index_max] <- -1
+  vcnt <- vcnt+1
+  if (vname %in% V(attack_g)$name){
+    attack_g <- delete_vertices(attack_g, vname)
+    attack_g <- extract_component(attack_g)
+    
+    if (i == 1 || i%%100 == 0){
+      size_GC <- c(size_GC, (vcount(attack_g)/tot_v)*100)
+      v_removed <- c(v_removed, (vcnt/tot_v)*100)
+    }
+  }
+
+ 
+
+}
+# Salvare gli ultimi nodi rimossi
+size_GC <- c(size_GC, (vcount(attack_g)/tot_v)*100)
+v_removed <- c(v_removed, (vcnt/tot_v)*100)
+cat('Nodi rimossi:', vcnt)
+cat('Time execution:', Sys.time()-t1)
+
+
+
+plot(x=v_removed, y=size_GC,
+     xlab='Fraction of vertices removed',
+     ylab = 'Fractional size of largest component' ,type="l")
+```
+```{r}
+attack_my_g <- gr_f
+tot_v <- vcount(attack_my_g )
+size_GC <- c()
+perc<- c()
+for (i in 1:tot_v) {
+  deg = degree(attack_my_g)
+  ord_degrees = sort(deg, decreasing = TRUE)
+  #cat('deg ', ord_degrees, '\n')
+  idx <- V(attack_my_g)[which.max(deg == ord_degrees[1])]
+  #cat('idx ',  idx, idx, 'Perc nodi ', i/tot_v, '\n')
+  attack_my_g <- delete_vertices(attack_my_g, idx)
+  attack_my_g  <- extract_component(attack_my_g)
+  GCv<- vcount(attack_my_g)
+  size_GC[i] <- (GCv/tot_v)*100
+  perc[i]<- (i/tot_v)*100
+}
+plot(perc, size_GC,
+     xlab = "Fraction of vertices removed",
+     ylab = "Fractional size of largest component",
+     main = "Sequential Attack")
+lines(perc, size_GC, col = "red")
+
+```
+
+#####
+attack_my_g <- g.sub 
+tot_v <- vcount(attack_my_g )
+size_GC <- c()
+perc<- c()
+#DEG <- degree(attack_my_g)
+#ord_degrees <- sort(DEG, decreasing = TRUE)
+for (i in 1:3) {
+  deg = degree(attack_my_g)
+  ord_degrees = sort(deg, decreasing = TRUE)
+  cat('deg ', ord_degrees[1:10], '\n')
+  idx <- (ord_degrees)[which.max(deg)]
+  cat('idx ',  idx, '\n')
+  attack_my_g <- delete_vertices(attack_my_g, c(idx))
+  attack_my_g <- extract_component(attack_my_g)
+}
+
+
+
+idx <- which.max(ord_degrees[i])
+  cat('Nodo eliminato: ', idx, 'Perc nodi ', i/tot_v, '\n')
+  attack_my_g <- delete_vertices(attack_my_g, idx)
+  attack_my_g <- extract_component(attack_my_g)
+  DEG <- degree(attack_my_g)
+  ord_degrees <- sort(DEG, decreasing = TRUE)
+
+
+plot(perc, size_GC,
+     xlab = "% verteces removed",
+     ylab = "% of the GC remained",
+     main = "Sequential Attack")
+lines(perc, size_GC, col = "red")
+
+
+ord_degrees[2]
+is.connected(attack_my_g)
+vcount(attack_my_g)
+
+#robustness(g.sub, type = c("vertex"), measure = c("degree"), N = 10)
+
+
+
+
+
+```
+
+
+
+
+```{r}
+# The maximum degree
+max(degree(g.sub))
+# The corresponding node (assuming there is only one with that degree)
+v = V(g.sub)[which.max(degree(g.sub))]
+
+#subgraph basato sull'ordine dei nodi
+ggg = induced.subgraph(fb_gc, V(fb_gc)[which(deg>=ord_degrees[200])])
+vcount(ggg)
+ecount(ggg)
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+summary(cars)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
